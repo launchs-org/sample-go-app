@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>File Upload</title>
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        #progress-container { width: 300px; height: 10px; border: 1px solid #ccc; margin: 10px 0; display: none; }
+        #progress-bar { width: 0%; height: 100%; background: #4caf50; }
+        #gallery { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 20px; }
+        .item { border: 1px solid #ddd; padding: 5px; }
+    </style>
+</head>
+<body>
+    <h1>画像アップロード</h1>
+    <input type="file" id="fileInput">
+    <button onclick="uploadFile()">アップロード</button>
+    <div id="progress-container"><div id="progress-bar"></div></div>
+    <p id="status"></p>
+
+    <div id="gallery"></div>
+
+    <script>
+        async function loadFiles() {
+            const res = await fetch('/files');
+            const files = await res.json();
+            const gallery = document.getElementById('gallery');
+            gallery.innerHTML = files.map(f => `
+                <div class="item">
+                    <img src="/uploads/${f}" style="width: 100px; height: 100px; object-fit: cover;">
+                    <p>${f.split('_').slice(1).join('_')}</p>
+                    <button onclick="deleteFile('${f}')">削除</button>
+                </div>
+            `).join('');
+        }
+
+        async function deleteFile(name) {
+            await fetch('/files/' + name, { method: 'DELETE' });
+            loadFiles();
+        }
+
+        async function uploadFile() {
+            const file = document.getElementById('fileInput').files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const progressBar = document.getElementById('progress-bar');
+            document.getElementById('progress-container').style.display = 'block';
+
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/upload', true);
+
+            xhr.upload.onprogress = (e) => {
+                const percent = (e.loaded / e.total) * 100;
+                progressBar.style.width = percent + '%';
+            };
+
+            xhr.onload = () => {
+                document.getElementById('status').innerText = xhr.responseText;
+                loadFiles();
+            };
+
+            xhr.send(formData);
+        }
+        loadFiles();
+    </script>
+</body>
+</html>
