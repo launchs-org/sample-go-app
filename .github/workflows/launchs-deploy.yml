@@ -1,0 +1,47 @@
+# launchs に自動デプロイする workflow(ビルド: Railpack)。
+# どのリポジトリに置いても動く(イメージの名前は、下で、そのリポジトリの持ち主から作る)。
+#
+# 使う前に:
+#   1. リポジトリの Settings > Secrets and variables > Actions に、次の 2 つを登録する。
+#        LAUNCHS_URL    https://www.shconn.org
+#        LAUNCHS_TOKEN  この deploy の「自動デプロイ(webhook)」で発行したトークン
+#   2. 最初の実行のあと、ghcr.io のパッケージ「launchs-d52f20a8-c994-4a78-be32-8a0da6ac2d44」を、公開(Public)にする。
+#        (GitHub のパッケージは、最初は非公開。launchs は、非公開のイメージを取得できない)
+name: Deploy to launchs
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: イメージの名前を決める
+        id: image
+        # ghcr.io は小文字だけ。deploy ごとに違う名前にして、他のものと重ならないようにする。
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/launchs-d52f20a8-c994-4a78-be32-8a0da6ac2d44" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # Railpack: Dockerfile が無くても、コードを見て、自動でイメージを作る。
+      # (iloveitaly/github-action-railpack。@master は動く先が変わるので、慣れたら、コミットの ID に固定すると安全)
+      - name: イメージを作って push する
+        uses: iloveitaly/github-action-railpack@master
+        with:
+          context: .
+          push: true
+          # 毎回違うタグ(コミットの ID)にする。latest だけだと、変わったと判断できない。
+          tags: ${{ steps.image.outputs.name }}:${{ github.sha }}
+      - name: launchs に反映
+        run: |
+          curl -fsS -X POST "${{ secrets.LAUNCHS_URL }}/hooks/deploy" \
+            -H "X-Launchs-Token: ${{ secrets.LAUNCHS_TOKEN }}" \
+            -d "{\"imageRef\":\"${{ steps.image.outputs.name }}:${{ github.sha }}\"}"
