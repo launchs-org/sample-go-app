@@ -5,14 +5,16 @@
 #   1. リポジトリの Settings > Secrets and variables > Actions に、次の 2 つを登録する。
 #        LAUNCHS_URL    https://www.shconn.org
 #        LAUNCHS_TOKEN  この deploy の「自動デプロイ(webhook)」で発行したトークン
-#   2. 最初の実行のあと、ghcr.io のパッケージ「launchs-d52f20a8-c994-4a78-be32-8a0da6ac2d44」を、公開(Public)にする。
+#   2. 最初の実行のあと、ghcr.io のパッケージ「launchs-81eaff44-cd59-4cc7-9735-faae981fc742」を、公開(Public)にする。
 #        (GitHub のパッケージは、最初は非公開。launchs は、非公開のイメージを取得できない)
 name: Deploy to launchs
 
+# 動くとき: main ブランチへの push(自動)と、Actions タブの「Run workflow」(手動)。
 on:
   push:
     branches: [main]
   workflow_dispatch:
+
 permissions:
   contents: read
   packages: write
@@ -25,7 +27,7 @@ jobs:
       - name: イメージの名前を決める
         id: image
         # ghcr.io は小文字だけ。deploy ごとに違う名前にして、他のものと重ならないようにする。
-        run: echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/launchs-d52f20a8-c994-4a78-be32-8a0da6ac2d44" >> "$GITHUB_OUTPUT"
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/launchs-81eaff44-cd59-4cc7-9735-faae981fc742" >> "$GITHUB_OUTPUT"
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -42,6 +44,11 @@ jobs:
           tags: ${{ steps.image.outputs.name }}:${{ github.sha }}
       - name: launchs に反映
         run: |
-          curl -fsS -X POST "${{ secrets.LAUNCHS_URL }}/hooks/deploy" \
+          # 失敗したとき、原因が分かるよう、HTTP の番号と、返事の中身を出す(401: トークン、403: アクセスの制限、409: 反映中)。
+          status=$(curl -sS --max-time 30 -o response.txt -w "%{http_code}" -X POST "${{ secrets.LAUNCHS_URL }}/hooks/deploy" \
             -H "X-Launchs-Token: ${{ secrets.LAUNCHS_TOKEN }}" \
-            -d "{\"imageRef\":\"${{ steps.image.outputs.name }}:${{ github.sha }}\"}"
+            -d "{\"imageRef\":\"${{ steps.image.outputs.name }}:${{ github.sha }}\"}")
+          echo "HTTP $status"
+          cat response.txt
+          echo
+          case "$status" in 2*) ;; *) exit 1 ;; esac
