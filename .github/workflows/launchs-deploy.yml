@@ -12,7 +12,7 @@ name: Deploy to launchs
 on:
   push:
     branches: [main]
-
+  workflow_dispatch:
 permissions:
   contents: read
   packages: write
